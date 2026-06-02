@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Голосовой ИИ-ассистент с памятью</title>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f5f7fb; margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 16px; }
+        .card { max-width: 800px; width: 100%; background: white; border-radius: 32px; box-shadow: 0 20px 35px -12px rgba(0,0,0,0.1); padding: 24px 20px 32px; text-align: center; }
+        h1 { font-size: 1.75rem; font-weight: 600; margin: 0 0 8px; color: #1e293b; }
+        .sub { color: #475569; margin-bottom: 28px; font-size: 0.9rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; }
+        .status { background: #f1f5f9; border-radius: 60px; padding: 8px 18px; font-size: 0.8rem; font-weight: 500; display: inline-block; margin-bottom: 22px; }
+        .interim { background: #fefce8; border-left: 5px solid #eab308; padding: 14px 18px; border-radius: 20px; font-size: 0.9rem; color: #854d0e; text-align: left; margin-top: 10px; }
+        .final-box { background: #f8fafc; border-radius: 24px; padding: 18px; margin-top: 16px; text-align: left; border: 1px solid #e2e8f0; }
+        .final-label, .ai-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; color: #64748b; margin-bottom: 8px; }
+        .final-text, .ai-text { font-size: 1rem; line-height: 1.5; color: #0f172a; word-break: break-word; max-height: 200px; overflow-y: auto; }
+        .ai-response { background: #eef2ff; border-radius: 24px; padding: 18px; margin-top: 16px; text-align: left; border: 1px solid #c7d2fe; display: none; }
+        .ai-label { color: #4f46e5; }
+        .note { font-size: 0.7rem; color: #94a3b8; margin-top: 24px; background: #f1f5f9; padding: 12px; border-radius: 20px; }
+        .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(0,0,0,.1); border-radius: 50%; border-top-color: #3b82f6; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .token-input { margin-top: 15px; padding: 10px; background: #f8fafc; border-radius: 16px; text-align: left; }
+        .token-input label { font-size: 0.75rem; font-weight: 600; color: #334155; }
+        .token-input input { width: 100%; padding: 8px 12px; margin-top: 5px; border: 1px solid #cbd5e1; border-radius: 12px; font-family: monospace; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>🎙️ ИИ-ассистент</h1>
+    <div class="sub">Говорите. Фраза <strong>"End of Input"</strong> отправит текст в ИИ (диалог с памятью).</div>
+    <div><span class="status" id="statusText">Запуск микрофона...</span></div>
+    <div class="final-box"><div class="final-label">📝 Накопленный текст</div><div class="final-text" id="finalText">—</div></div>
+    <div class="ai-response" id="aiResponseBlock"><div class="ai-label">🤖 Ответ от ИИ</div><div class="ai-text" id="aiText">—</div></div>
+    <div class="interim">💬 <span id="interimText">Промежуточный текст будет здесь</span></div>
+    <div class="token-input"><label>🔐 GitHub Personal Access Token (сохраняется)</label><input type="password" id="githubToken" placeholder="Введите ваш GitHub PAT"></div>
+    <div class="note">✅ Микрофон работает непрерывно. Токен сохраняется. История диалога сохраняется.</div>
+</div>
+
+<script>
+    (function() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            document.getElementById('statusText').innerText = '❌ Ваш браузер не поддерживает SpeechRecognition';
+            return;
+        }
+
+        const statusDiv = document.getElementById('statusText');
+        const finalSpan = document.getElementById('finalText');
+        const interimSpan = document.getElementById('interimText');
+        const aiBlock = document.getElementById('aiResponseBlock');
+        const aiSpan = document.getElementById('aiText');
+        const tokenInput = document.getElementById('githubToken');
+
+        let accumulatedText = "";
+        let isProcessing = false;
+        // История сообщений для API
+        let messages = [
+            { role: "system", content: "You are a helpful assistant." }
+        ];
+
+        const STORAGE_KEY = 'github_pat';
+        function loadToken() { const saved = localStorage.getItem(STORAGE_KEY); if (saved) tokenInput.value = saved; }
+        function saveToken() { const token = tokenInput.value.trim(); if (token) localStorage.setItem(STORAGE_KEY, token); else localStorage.removeItem(STORAGE_KEY); }
+        tokenInput.addEventListener('change', saveToken);
+        loadToken();
+
+        async function askGitHubModels(userText, githubToken, fullMessages) {
+            const apiUrl = "https://models.github.ai/inference/chat/completions";
+            const headers = {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${githubToken}`
+            };
+            const payload = {
+                model: "gpt-4o-mini",
+                messages: fullMessages,
+                temperature: 0.7,
+                max_tokens: 500
+            };
+            try {
+                const response = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                const data = await response.json();
+                return data.choices[0].message.content.trim();
+            } catch (error) {
+                console.error(error);
+                return `⚠️ Ошибка: ${error.message}`;
+            }
+        }
+
+        function speakText(text) {
+            if (!window.speechSynthesis) return;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            utterance.rate = 0.95;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        async function processTextAndSend() {
+            if (isProcessing) return;
+            const userText = accumulatedText.trim().replace(/end of input$/i, '').trim();
+            const githubToken = tokenInput.value.trim();
+            if (!userText) {
+                statusDiv.innerText = '⚠️ Нет текста для отправки';
+                return;
+            }
+            if (!githubToken) {
+                statusDiv.innerText = '❌ Введите GitHub токен';
+                return;
+            }
+            isProcessing = true;
+            statusDiv.innerText = '🧠 Отправка в ИИ...';
+            statusDiv.style.background = '#e0e7ff';
+            aiBlock.style.display = 'block';
+            aiSpan.innerHTML = '<div class="loading"></div>';
+
+            // Добавляем сообщение пользователя в историю
+            messages.push({ role: "user", content: userText });
+
+            const answer = await askGitHubModels(userText, githubToken, messages);
+            // Добавляем ответ ассистента в историю
+            messages.push({ role: "assistant", content: answer });
+
+            aiSpan.innerText = answer;
+            speakText(answer);
+            // Очищаем накопленный текст, но не историю
+            accumulatedText = "";
+            finalSpan.innerText = "—";
+            isProcessing = false;
+            statusDiv.innerText = '🎙️ Микрофон активен. Говорите...';
+            statusDiv.style.background = '#dbeafe';
+        }
+
+        // Инициализация распознавания
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+            statusDiv.innerText = '🎙️ Микрофон активен. Говорите...';
+            statusDiv.style.background = '#dbeafe';
+            interimSpan.innerText = '...';
+        };
+        recognition.onerror = (event) => {
+            console.warn(event.error);
+            if (event.error === 'no-speech') return;
+            if (event.error === 'not-allowed') {
+                statusDiv.innerText = '🚫 Нет доступа к микрофону. Разрешите в браузере и обновите страницу.';
+                statusDiv.style.background = '#fee2e2';
+            } else {
+                statusDiv.innerText = `⚠️ Ошибка: ${event.error}`;
+                statusDiv.style.background = '#fee2e2';
+            }
+        };
+        recognition.onresult = (event) => {
+            let interim = '';
+            let final = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const t = event.results[i][0].transcript.trim();
+                if (event.results[i].isFinal) final += t + ' ';
+                else interim += t;
+            }
+            if (interim) interimSpan.innerText = interim;
+            if (final) {
+                accumulatedText += (accumulatedText ? ' ' : '') + final.trim();
+                finalSpan.innerText = accumulatedText;
+                if (accumulatedText.toLowerCase().includes('end of input') && !isProcessing) {
+                    processTextAndSend();
+                }
+                interimSpan.innerText = '🎤 Продолжайте...';
+            }
+        };
+        recognition.onend = () => {
+            if (!isProcessing && statusDiv.innerText.includes('активен')) {
+                recognition.start();
+            }
+        };
+
+        recognition.start();
+    })();
+</script>
+</body>
+</html>
