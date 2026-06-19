@@ -6,9 +6,12 @@
     <title>Голосовой ИИ-ассистент (отмена ввода)</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f5f7fb; margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 16px; }
+        body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f5f7fb; margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
         .card { max-width: 800px; width: 100%; background: white; border-radius: 32px; box-shadow: 0 20px 35px -12px rgba(0,0,0,0.1); padding: 24px 20px 32px; text-align: center; }
-        h1 { font-size: 1.75rem; font-weight: 600; margin: 0 0 8px; color: #1e293b; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { font-size: 1.75rem; font-weight: 600; margin: 0; color: #1e293b; }
+        .lang-btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 12px; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: background 0.3s; }
+        .lang-btn:hover { background: #4338ca; }
         .sub { color: #475569; margin-bottom: 28px; font-size: 0.9rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; }
         .status { background: #f1f5f9; border-radius: 60px; padding: 8px 18px; font-size: 0.8rem; font-weight: 500; display: inline-block; margin-bottom: 22px; }
         .interim { background: #fefce8; border-left: 5px solid #eab308; padding: 14px 18px; border-radius: 20px; font-size: 0.9rem; color: #854d0e; text-align: left; margin-top: 10px; }
@@ -27,21 +30,123 @@
 </head>
 <body>
 <div class="card">
-    <h1>🎙️ ИИ-ассистент</h1>
-    <div class="sub">Говорите. <strong>"End of Input"</strong> → отправить в ИИ. <strong>"Cancel Input"</strong> → очистить набранный текст.</div>
-    <div><span class="status" id="statusText">Запуск микрофона...</span></div>
-    <div class="final-box"><div class="final-label">📝 Накопленный текст</div><div class="final-text" id="finalText">—</div></div>
-    <div class="ai-response" id="aiResponseBlock"><div class="ai-label">🤖 Ответ от ИИ</div><div class="ai-text" id="aiText">—</div></div>
-    <div class="interim">💬 <span id="interimText">Промежуточный текст будет здесь</span></div>
-    <div class="token-input"><label>🔐 GitHub Personal Access Token (сохраняется)</label><input type="password" id="githubToken" placeholder="Введите ваш GitHub PAT"></div>
-    <div class="note">✅ Микрофон работает непрерывно. История диалога сохраняется для контекста. "Cancel Input" сбрасывает только текущую фразу.</div>
+    <div class="header-top">
+        <h1>🎙️ <span data-text="title">ИИ-ассистент</span></h1>
+        <button class="lang-btn" id="langBtn" onclick="toggleLanguage()">🇬🇧 EN</button>
+    </div>
+    <div class="sub"><span data-text="description">Говорите. <strong>"End of Input"</strong> → отправить в ИИ. <strong>"Cancel Input"</strong> → очистить набранный текст.</span></div>
+    <div><span class="status" id="statusText" data-text="startup">Запуск микрофона...</span></div>
+    <div class="final-box">
+        <div class="final-label" data-text="accumulated-label">📝 Накопленный текст</div>
+        <div class="final-text" id="finalText">—</div>
+    </div>
+    <div class="ai-response" id="aiResponseBlock">
+        <div class="ai-label" data-text="ai-label">🤖 Ответ от ИИ</div>
+        <div class="ai-text" id="aiText">—</div>
+    </div>
+    <div class="interim">💬 <span id="interimText" data-text="interim">Промежуточный текст будет здесь</span></div>
+    <div class="token-input">
+        <label data-text="token-label">🔐 GitHub Personal Access Token (сохраняется)</label>
+        <input type="password" id="githubToken" data-text="token-placeholder" placeholder="Введите ваш GitHub PAT">
+    </div>
+    <div class="note" data-text="note">✅ Микрофон работает непрерывно. История диалога сохраняется для контекста. "Cancel Input" сбрасывает текст.</div>
 </div>
 
 <script>
+    // Словарь переводов
+    const translations = {
+        ru: {
+            title: 'ИИ-ассистент',
+            description: 'Говорите. <strong>"End of Input"</strong> → отправить в ИИ. <strong>"Cancel Input"</strong> → очистить набранный текст.',
+            startup: 'Запуск микрофона...',
+            'accumulated-label': '📝 Накопленный текст',
+            'ai-label': '🤖 Ответ от ИИ',
+            interim: 'Промежуточный текст будет здесь',
+            'token-label': '🔐 GitHub Personal Access Token (сохраняется)',
+            'token-placeholder': 'Введите ваш GitHub PAT',
+            note: '✅ Микрофон работает непрерывно. История диалога сохраняется для контекста. "Cancel Input" сбрасывает текст.',
+            'mic-active': '🎙️ Микрофон активен. Говорите...',
+            'mic-error': '❌ Ошибка микрофона',
+            'no-browser-support': '❌ Ваш браузер не поддерживает SpeechRecognition',
+            'no-access': '🚫 Нет доступа к микрофону. Разрешите в браузере и обновите страницу.',
+            'no-text': '⚠️ Нет текста для отправки',
+            'no-token': '❌ Введите GitHub токен',
+            'sending': '🧠 Отправка в ИИ...',
+            'cancelled': '🗑️ Текст отменён. Говорите дальше.',
+            'continue': '🎤 Продолжайте...',
+            'error': '⚠️ Ошибка:',
+            'lang-btn': '🇷🇺 РУ'
+        },
+        en: {
+            title: 'AI Assistant',
+            description: 'Speak. <strong>"End of Input"</strong> → send to AI. <strong>"Cancel Input"</strong> → clear accumulated text.',
+            startup: 'Starting microphone...',
+            'accumulated-label': '📝 Accumulated Text',
+            'ai-label': '🤖 AI Response',
+            interim: 'Interim text will appear here',
+            'token-label': '🔐 GitHub Personal Access Token (saved)',
+            'token-placeholder': 'Enter your GitHub PAT',
+            note: '✅ Microphone works continuously. Dialog history is saved for context. "Cancel Input" resets text.',
+            'mic-active': '🎙️ Microphone active. Speak...',
+            'mic-error': '❌ Microphone error',
+            'no-browser-support': '❌ Your browser does not support SpeechRecognition',
+            'no-access': '🚫 No microphone access. Allow in browser and refresh the page.',
+            'no-text': '⚠️ No text to send',
+            'no-token': '❌ Enter GitHub token',
+            'sending': '🧠 Sending to AI...',
+            'cancelled': '🗑️ Text cancelled. Continue speaking.',
+            'continue': '🎤 Continue...',
+            'error': '⚠️ Error:',
+            'lang-btn': '🇬🇧 EN'
+        }
+    };
+
+    let currentLang = localStorage.getItem('appLang') || 'ru';
+
+    function updateUILanguage() {
+        const elements = document.querySelectorAll('[data-text]');
+        elements.forEach(el => {
+            const key = el.getAttribute('data-text');
+            const text = translations[currentLang][key];
+            if (el.id === 'interimText' || key === 'description' || key === 'note') {
+                el.innerHTML = text;
+            } else if (el.tagName === 'INPUT') {
+                el.placeholder = text;
+            } else {
+                el.innerText = text;
+            }
+        });
+
+        // Обновляем кнопку языка
+        document.getElementById('langBtn').innerText = translations[currentLang]['lang-btn'];
+
+        // Обновляем язык распознавания речи
+        if (window.recognition) {
+            window.recognition.lang = currentLang === 'ru' ? 'ru-RU' : 'en-US';
+        }
+
+        // Обновляем язык синтеза речи
+        window.speechLang = currentLang === 'ru' ? 'ru-RU' : 'en-US';
+
+        localStorage.setItem('appLang', currentLang);
+    }
+
+    function toggleLanguage() {
+        currentLang = currentLang === 'ru' ? 'en' : 'ru';
+        updateUILanguage();
+    }
+
+    function getText(key) {
+        return translations[currentLang][key];
+    }
+
+    // Инициализация при загрузке
+    window.addEventListener('DOMContentLoaded', updateUILanguage);
+
     (function() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
-            document.getElementById('statusText').innerText = '❌ Ваш браузер не поддерживает SpeechRecognition';
+            document.getElementById('statusText').innerText = getText('no-browser-support');
             return;
         }
 
@@ -54,10 +159,11 @@
 
         let accumulatedText = "";
         let isProcessing = false;
-        // История сообщений для API (сохраняется между вопросами)
         let messages = [
             { role: "system", content: "You are a helpful assistant." }
         ];
+
+        window.speechLang = currentLang === 'ru' ? 'ru-RU' : 'en-US';
 
         const STORAGE_KEY = 'github_pat';
         function loadToken() { const saved = localStorage.getItem(STORAGE_KEY); if (saved) tokenInput.value = saved; }
@@ -84,7 +190,7 @@
                 return data.choices[0].message.content.trim();
             } catch (error) {
                 console.error(error);
-                return `⚠️ Ошибка: ${error.message}`;
+                return `${getText('error')} ${error.message}`;
             }
         }
 
@@ -92,7 +198,7 @@
             if (!window.speechSynthesis) return;
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
+            utterance.lang = window.speechLang;
             utterance.rate = 0.95;
             window.speechSynthesis.speak(utterance);
         }
@@ -102,43 +208,41 @@
             const userText = accumulatedText.trim().replace(/end of input$/i, '').trim();
             const githubToken = tokenInput.value.trim();
             if (!userText) {
-                statusDiv.innerText = '⚠️ Нет текста для отправки';
+                statusDiv.innerText = getText('no-text');
                 return;
             }
             if (!githubToken) {
-                statusDiv.innerText = '❌ Введите GitHub токен';
+                statusDiv.innerText = getText('no-token');
                 return;
             }
             isProcessing = true;
-            statusDiv.innerText = '🧠 Отправка в ИИ...';
+            statusDiv.innerText = getText('sending');
             statusDiv.style.background = '#e0e7ff';
             aiBlock.style.display = 'block';
             aiSpan.innerHTML = '<div class="loading"></div>';
 
-            // Добавляем сообщение пользователя в историю
             messages.push({ role: "user", content: userText });
             const answer = await askGitHubModels(messages, githubToken);
             messages.push({ role: "assistant", content: answer });
 
             aiSpan.innerText = answer;
             speakText(answer);
-            // Очищаем накопленный текст, но не историю
             accumulatedText = "";
             finalSpan.innerText = "—";
             isProcessing = false;
-            statusDiv.innerText = '🎙️ Микрофон активен. Говорите...';
+            statusDiv.innerText = getText('mic-active');
             statusDiv.style.background = '#dbeafe';
         }
 
-        // Инициализация распознавания
         const recognition = new SpeechRecognition();
+        window.recognition = recognition;
         recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = 'en-US';
+        recognition.lang = window.speechLang;
         recognition.maxAlternatives = 1;
 
         recognition.onstart = () => {
-            statusDiv.innerText = '🎙️ Микрофон активен. Говорите...';
+            statusDiv.innerText = getText('mic-active');
             statusDiv.style.background = '#dbeafe';
             interimSpan.innerText = '...';
         };
@@ -146,10 +250,10 @@
             console.warn(event.error);
             if (event.error === 'no-speech') return;
             if (event.error === 'not-allowed') {
-                statusDiv.innerText = '🚫 Нет доступа к микрофону. Разрешите в браузере и обновите страницу.';
+                statusDiv.innerText = getText('no-access');
                 statusDiv.style.background = '#fee2e2';
             } else {
-                statusDiv.innerText = `⚠️ Ошибка: ${event.error}`;
+                statusDiv.innerText = `${getText('mic-error')}: ${event.error}`;
                 statusDiv.style.background = '#fee2e2';
             }
         };
@@ -169,29 +273,31 @@
 
                 const lowerText = accumulatedText.toLowerCase();
 
-                // Обработка команды "cancel input" (очистить всё, не отправлять)
-                if (lowerText.includes('cancel input')) {
+                const cancelCommands = currentLang === 'ru' ? ['cancel input', 'отмена ввода'] : ['cancel input'];
+                const endCommands = currentLang === 'ru' ? ['end of input', 'конец ввода'] : ['end of input'];
+
+                if (cancelCommands.some(cmd => lowerText.includes(cmd))) {
                     accumulatedText = "";
                     finalSpan.innerText = "—";
-                    interimSpan.innerText = '🗑️ Текст отменён. Говорите дальше.';
-                    statusDiv.innerText = '🎙️ Отменено. Говорите...';
+                    interimSpan.innerText = getText('cancelled');
+                    statusDiv.innerText = getText('mic-active');
                     setTimeout(() => {
-                        if (interimSpan.innerText.includes('отменён')) {
+                        const cancelledText = getText('cancelled');
+                        if (interimSpan.innerText.includes(cancelledText.substring(0, 5))) {
                             interimSpan.innerText = '...';
                         }
                     }, 1500);
-                    return; // не проверяем на end of input
+                    return;
                 }
 
-                // Обработка команды "end of input" (отправить в ИИ)
-                if (lowerText.includes('end of input') && !isProcessing) {
+                if (endCommands.some(cmd => lowerText.includes(cmd)) && !isProcessing) {
                     processTextAndSend();
                 }
-                interimSpan.innerText = '🎤 Продолжайте...';
+                interimSpan.innerText = getText('continue');
             }
         };
         recognition.onend = () => {
-            if (!isProcessing && statusDiv.innerText.includes('активен')) {
+            if (!isProcessing && statusDiv.innerText.includes(getText('mic-active').substring(0, 3))) {
                 recognition.start();
             }
         };
