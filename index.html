@@ -187,10 +187,11 @@
                 const response = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(payload) });
                 if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
                 const data = await response.json();
-                return data.choices[0].message.content.trim();
+                document.
+                return "SUCCESS" + data.choices[0].message.content.trim();
             } catch (error) {
                 console.error(error);
-                return `${getText('error')} ${error.message}`;
+                return "ERROR" +  `${getText('error')} ${error.message}`;
             }
         }
 
