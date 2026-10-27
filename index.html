@@ -225,7 +225,7 @@
             const answer = await askGitHubModels(messages, githubToken);
             messages.push({ role: "assistant", content: answer });
 
-            aiSpan.innerText = answer;
+            aiSpan.innerText = answer + " DEBUG";
             speakText(answer);
             accumulatedText = "";
             finalSpan.innerText = "—";
